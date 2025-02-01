@@ -82,20 +82,22 @@ def get_speech_segments(audio_path, output_dir,file_name,sr=16000, frame_length=
     os.makedirs(output_dir, exist_ok=True)
     for i, seg in enumerate(filtered_segments):
         heppi=file.replace(".wav", "")
-        output_file = f"{output_dir}/{heppi}word_{i}.wav"
+        output_file = f"{output_dir}/{[heppi]}word_{i}.wav"
         print(output_file)
         sf.write(output_file, seg, samplerate=sr)
         print(f"[SAVED] {output_file}")
 
     print("[INFO] Processing complete.\n")
 
-directory = "F:/Datasets/IndianVoxCeleb/vox_indian"
-folders = os.listdir(directory)
 
-for speakerid in folders:
-    for folder in os.listdir(directory + "/" + speakerid):
-        for file in os.listdir(directory + "/" + speakerid + "/" + folder):
-            if not (file.endswith("_processed.wav")):
-                file_path = directory + "/" + speakerid + "/" + folder + "/" + file
-                output_dir = "F:/Datasets/IndianVoxCeleb/vox_indian_split/"+speakerid+"/"+folder
-                get_speech_segments(file_path, sr=16000, output_dir=output_dir, file_name=file)
+def process_and_segment():
+    directory = "F:/Datasets/IndianVoxCeleb/vox_indian"
+    folders = os.listdir(directory)
+
+    for speakerid in folders:
+        for folder in os.listdir(directory + "/" + speakerid):
+            for file in os.listdir(directory + "/" + speakerid + "/" + folder):
+                if not (file.endswith("_processed.wav")):
+                    file_path = directory + "/" + speakerid + "/" + folder + "/" + file
+                    output_dir = "F:/Datasets/IndianVoxCeleb/vox_indian_split/"+speakerid+"/"+folder
+                    get_speech_segments(file_path, sr=16000, output_dir=output_dir, file_name=file)

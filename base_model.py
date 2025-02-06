@@ -1,63 +1,65 @@
-import math,torch,torchaudio
+import math, torch, torchaudio
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class SEMoodule(nn.Module):
-    def __init(self,channels,bottlneck=128):
-        super(SEMoodule,self).__init__()
+    def __init(self, channels, bottlneck=128):
+        super(SEMoodule, self).__init__()
         self.se = nn.Sequential(
             nn.AdaptiveAvgPool1d(1),
-            nn.Conv1d(channels,bottlneck,kernel_size=1,padding=0),
+            nn.Conv1d(channels, bottlneck, kernel_size=1, padding=0),
             nn.ReLU(),
-            nn.Conv1d(bottlneck,bottlneck,kernel_size=1,padding=0),
+            nn.Conv1d(bottlneck, bottlneck, kernel_size=1, padding=0),
             nn.Sigmoid()
         )
 
-    def forward(self,input):
+    def forward(self, input):
         x = self.se(input)
-        return input*x
+        return input * x
+
 
 class Bottle2neck(nn.Module):
-    def __init(self, inplanes,planes,kernel_size=3,dilation=2,scale=8):
-        super(Bottle2neck,self).__init__()
-        width = int(math.floor(planes/scale))
-        self.conv1=nn.Conv1d(inplanes, width*scale , kernel_size=1)
-        self.bn1= nn.BatchNorm1d(width*scale)
-        self.nums= scale-1
-        convs,bns=[],[]
-        num_pad = math.floor(kernel_size/2)* dilation
-        for i in range (self.nums):
-            convs.append(nn.Conv1d(width,width, kernel_size=kernel_size, dilation=dilation, padding=num_pad))
+    def __init(self, inplanes, planes, kernel_size=3, dilation=2, scale=8):
+        super(Bottle2neck, self).__init__()
+        width = int(math.floor(planes / scale))
+        self.conv1 = nn.Conv1d(inplanes, width * scale, kernel_size=1)
+        self.bn1 = nn.BatchNorm1d(width * scale)
+        self.nums = scale - 1
+        convs, bns = [], []
+        num_pad = math.floor(kernel_size / 2) * dilation
+        for i in range(self.nums):
+            convs.append(nn.Conv1d(width, width, kernel_size=kernel_size, dilation=dilation, padding=num_pad))
             bns.append(nn.BatchNorm1d(width))
 
         self.convs = nn.ModuleList(convs)
         self.bns = nn.ModuleList(bns)
-        self.conv3 = nn.Conv1d(width*scale, planes, kernel_size=1)
+        self.conv3 = nn.Conv1d(width * scale, planes, kernel_size=1)
         self.bn3 = nn.BatchNorm1d(planes)
         self.relu = nn.ReLU()
         self.width = width
-        self.se=SEMoodule(planes)
+        self.se = SEMoodule(planes)
 
-    def forward(self,x):
+    def forward(self, x):
         residual = x
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
-        spx = torch.split(out,self.width, 1)
+        spx = torch.split(out, self.width, 1)
         for i in range(self.nums):
             if i == 0:
-                sp= spx[i]
+                sp = spx[i]
             else:
                 sp = sp + spx[i]
             sp = self.convs[i](sp)
             sp = self.relu(sp)
             sp = self.bns[i](sp)
             if i == 0:
-                out =sp
+                out = sp
             else:
-                out = torch.cat((out,sp),1)
+                out = torch.cat((out, sp), 1)
 
-        out =torch.cat((out , spx[self.nums]),1)
+        out = torch.cat((out, spx[self.nums]), 1)
         out = self.conv3(out)
         out = self.relu(out)
         out = self.bn3(out)
@@ -79,6 +81,7 @@ class PreEmphasis(nn.Module):
         input = input.unsqueeze(1)
         input = F.pad(input, (1, 0), 'reflect')
         return F.conv1d(input, self.flipped_filter).squeeze(1)
+
 
 class FbankAug(nn.Module):
     def __init__(self, freq_mask_width=(0, 8), time_mask_width=(0, 10)):
@@ -112,6 +115,7 @@ class FbankAug(nn.Module):
         x = self.mask_along_axis(x, dim=2)
         x = self.mask_along_axis(x, dim=1)
         return x
+
 
 class ECAPA_TDNN(nn.Module):
     def __init__(self, C):

@@ -1,7 +1,7 @@
 import torch, math
 import torch.nn as nn
 import torch.nn.functional as F
-from tools import *
+from helperFiles.tools import accuracy
 
 class AAMsoftmax(nn.Module):
     def __init__(self, n_class, m, s):

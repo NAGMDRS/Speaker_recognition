@@ -1,7 +1,7 @@
 import numpy, os, random, soundfile, torch
 
 class train_loader(object):
-    def __init__(self, train_list, train_path, num_frames, segment_audio=False, **kwargs):
+    def __init__(self, num_frames=200, train_path="F:/Datasets/IndianVoxCeleb/vox_indian_split",train_list="params/train_list.txt",segment_audio=False, **kwargs):
         self.train_path = train_path
         self.num_frames = num_frames
 
@@ -12,7 +12,8 @@ class train_loader(object):
         lines = open(train_list).read().splitlines()
         dictkeys = list(set([x.split()[0] for x in lines]))
         dictkeys.sort()
-        dictkeys = {key: val for key, val in enumerate(dictkeys)}
+        dictkeys = {key: val for val,key in enumerate(dictkeys)}
+        print(dictkeys)
 
         for index, line in enumerate(lines):
             speaker_label = dictkeys[line.split()[0]]

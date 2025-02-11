@@ -4,13 +4,13 @@ import torch.nn.functional as F
 
 
 class SEMoodule(nn.Module):
-    def __init(self, channels, bottlneck=128):
+    def __init__(self, channels, bottlneck=128):
         super(SEMoodule, self).__init__()
         self.se = nn.Sequential(
             nn.AdaptiveAvgPool1d(1),
             nn.Conv1d(channels, bottlneck, kernel_size=1, padding=0),
             nn.ReLU(),
-            nn.Conv1d(bottlneck, bottlneck, kernel_size=1, padding=0),
+            nn.Conv1d(bottlneck, channels, kernel_size=1, padding=0),
             nn.Sigmoid()
         )
 
@@ -20,9 +20,10 @@ class SEMoodule(nn.Module):
 
 
 class Bottle2neck(nn.Module):
-    def __init(self, inplanes, planes, kernel_size=3, dilation=2, scale=8):
+    def __init__(self, inplanes, planes, kernel_size=3, dilation=2, scale=8):
         super(Bottle2neck, self).__init__()
         width = int(math.floor(planes / scale))
+        self.kernel_size=kernel_size
         self.conv1 = nn.Conv1d(inplanes, width * scale, kernel_size=1)
         self.bn1 = nn.BatchNorm1d(width * scale)
         self.nums = scale - 1

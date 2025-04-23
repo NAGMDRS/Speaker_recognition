@@ -197,22 +197,30 @@ class ECAPA_TDNN(nn.Module):
 
 
 # helper to plot the intermediate attention activations
-def plot_intermediate_attention(feats):
+def plot_intermediate_attention_heatmaps(feats):
     """
-    feats: list of tensors [C_i x T] from each attention sub-layer
-    Plots the mean activation over channels for each intermediate map.
+    feats: list of [channels × time_frames] tensors
+    Plots each as a heatmap (channels on y, time on x).
     """
-    names = ['Conv1d→256', 'ReLU', 'BatchNorm1d', 'Tanh', 'Conv1d→1536', 'Softmax']
-    plt.figure(figsize=(12, 2 * len(feats)))
+    names = [
+        'Conv1d→256',
+        'ReLU',
+        'BatchNorm1d',
+        'Tanh',
+        'Conv1d→1536',
+        'Softmax',
+    ]
     for i, feat in enumerate(feats):
-        curve = feat.mean(dim=0).numpy()
-        plt.subplot(len(feats), 1, i + 1)
-        plt.plot(curve)
+        plt.figure(figsize=(8, 4))
+        # feat is on CPU, shape [C, T]
+        plt.imshow(feat.numpy(), aspect='auto', origin='lower')
         plt.title(names[i])
         plt.xlabel('Time Frame')
-        plt.ylabel('Activation')
-    plt.tight_layout()
-    plt.show()
+        plt.ylabel('Channel')
+        plt.colorbar(label='Activation')
+        plt.tight_layout()
+        plt.show()
+
 
 # Example usage:
 # model = ECAPA_TDNN(C=512).to(device)

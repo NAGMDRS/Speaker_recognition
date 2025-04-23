@@ -135,8 +135,8 @@ class ECAPA_TDNN(nn.Module):
         self.fc6 = nn.Linear(3072, 256).to(device)
         self.bn6 = nn.BatchNorm1d(256).to(device)
 
-    # Added return_all_attentions flag and logic to capture intermediate attention maps
-    def forward(self, x, aug=False, return_all_attentions=False):
+    # Added return_attention flag and logic to capture intermediate attention maps
+    def forward(self, x, aug=False, return_attention=False):
         x = x.to(device)
         with torch.no_grad():
             x = self.torchfbank(x) + 1e-6
@@ -161,7 +161,7 @@ class ECAPA_TDNN(nn.Module):
             torch.sqrt(torch.var(x, dim=2, keepdim=True).clamp(min=1e-4)).repeat(1, 1, t)
         ), dim=1)
 
-        if return_all_attentions:
+        if return_attention:
             # CHANGED: capture outputs after each layer in self.attention
             feats = []
             f = global_x
@@ -222,8 +222,15 @@ def plot_intermediate_attention_heatmaps(feats):
         plt.show()
 
 
-# Example usage:
-# model = ECAPA_TDNN(C=512).to(device)
-# waveform = torch.randn(16000)
-# feats = model(waveform.unsqueeze(0), return_all_attentions=True)
-# plot_intermediate_attention(feats)
+if __name__ == "__main__":
+    C = 512
+    model = ECAPA_TDNN(C).to(device)
+
+    # 1s of dummy audio
+    waveform = torch.randn(16000, device=device)
+
+    # get intermediate attention maps
+    feats = model(waveform.unsqueeze(0), return_attention=True)
+
+    # now plot them as heat‐maps
+    plot_intermediate_attention_heatmaps(feats)

@@ -135,7 +135,8 @@ class ECAPA_TDNN(nn.Module):
         self.fc6 = nn.Linear(3072, 256).to(device)
         self.bn6 = nn.BatchNorm1d(256).to(device)
 
-    def forward(self, x, aug=False, return_attention=False):
+    # Added return_all_attentions flag and logic to capture intermediate attention maps
+    def forward(self, x, aug=False, return_all_attentions=False):
         x = x.to(device)
         with torch.no_grad():
             x = self.torchfbank(x) + 1e-6
@@ -143,6 +144,7 @@ class ECAPA_TDNN(nn.Module):
             x = x - torch.mean(x, dim=-1, keepdim=True)
             if aug:
                 x = self.apply_spec_augment(x)
+
         x = self.conv1(x)
         x = self.relu(x)
         x = self.bn1(x)
@@ -151,12 +153,23 @@ class ECAPA_TDNN(nn.Module):
         x3 = self.layer3(x + x1 + x2)
         x = self.layer4(torch.cat((x1, x2, x3), dim=1))
         x = self.relu(x)
+
         t = x.size()[-1]
         global_x = torch.cat((
             x,
             torch.mean(x, dim=2, keepdim=True).repeat(1, 1, t),
             torch.sqrt(torch.var(x, dim=2, keepdim=True).clamp(min=1e-4)).repeat(1, 1, t)
         ), dim=1)
+
+        if return_all_attentions:
+            # CHANGED: capture outputs after each layer in self.attention
+            feats = []
+            f = global_x
+            for layer in self.attention:
+                f = layer(f)
+                feats.append(f.detach().cpu().squeeze(0))  # [channels, time]
+            return feats
+            
         w = self.attention(global_x)
         mu = torch.sum(x * w, dim=2)
         sg = torch.sqrt((torch.sum((x ** 2) * w, dim=2) - mu ** 2).clamp(min=1e-4))
@@ -183,23 +196,26 @@ class ECAPA_TDNN(nn.Module):
         return x
 
 
-def visualize_attention_amplitude(model, waveform):
-    model.eval()
-    with torch.no_grad():
-        emb, w = model(waveform.unsqueeze(0), return_attention=True)
-    mel_spec = model.torchfbank(waveform.unsqueeze(0))
-    amplitude = mel_spec.sum(dim=1).squeeze(0).cpu().numpy()
-    attention = w.mean(dim=1).squeeze(0).cpu().numpy()
-    combined = np.vstack([amplitude, attention])
-    plt.figure()
-    plt.imshow(combined, aspect='auto', origin='lower')
-    plt.yticks([0, 1], ['Amplitude', 'Attention'])
-    plt.xlabel('Time Frames')
-    plt.title('Attention vs Amplitude Heatmap')
+# helper to plot the intermediate attention activations
+def plot_intermediate_attention(feats):
+    """
+    feats: list of tensors [C_i x T] from each attention sub-layer
+    Plots the mean activation over channels for each intermediate map.
+    """
+    names = ['Conv1d→256', 'ReLU', 'BatchNorm1d', 'Tanh', 'Conv1d→1536', 'Softmax']
+    plt.figure(figsize=(12, 2 * len(feats)))
+    for i, feat in enumerate(feats):
+        curve = feat.mean(dim=0).numpy()
+        plt.subplot(len(feats), 1, i + 1)
+        plt.plot(curve)
+        plt.title(names[i])
+        plt.xlabel('Time Frame')
+        plt.ylabel('Activation')
+    plt.tight_layout()
     plt.show()
 
-
 # Example usage:
-# uncomment this if want to use: model = ECAPA_TDNN(C=512).to(device)
+# model = ECAPA_TDNN(C=512).to(device)
 # waveform = torch.randn(16000)
-# visualize_attention_amplitude(model, waveform)
+# feats = model(waveform.unsqueeze(0), return_all_attentions=True)
+# plot_intermediate_attention(feats)

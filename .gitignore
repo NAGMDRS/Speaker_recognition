@@ -1,6 +1,6 @@
 /.venv/
 .idea/**
 /placeholder.py
-__pycache__/
+/__pycache__/
 helperFiles/train_list0.txt
 params/train_listBrid.txt

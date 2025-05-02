@@ -8,6 +8,9 @@ from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from helperFiles.dataLoader import train_loader
 from main_model import ECAPAModel
+from torchinfo import summary
+
+
 
 
 def visualize_embeddings(model, data_loader, num_samples=500, method='tsne'):
@@ -58,26 +61,27 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 if __name__ == '__main__':
     s = ECAPAModel(C=1024, m=0.2, s=30, n_class=N_CLASS).to(device)
+    summary(s, input_size=(1, 16000), device=device)
 
-    trainloader = train_loader()
-    trainLoader = torch.utils.data.DataLoader(
-        trainloader, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=False, drop_last=True,
-        persistent_workers=False
-    )
-
-    EERs = []
-    epoch = 1
-
-    while epoch <= MAX_EPOCH:
-        loss, lr, acc = s.train_network(epoch=epoch, loader=trainLoader)
-        print(f"Epoch {epoch}: Loss {loss.item():.5f}, LR {lr:.6f}, ACC {acc.item():.2f}%")
-
-        if epoch % TEST_STEP == 0:
-            model_save_path = f"{SAVE_PATH}/model4_{epoch:04d}.model"
-            s.save_parameters(model_save_path)
-            EER = s.eval_network()[0]
-            EERs.append(EER)
-            print(f"Epoch {epoch}: Loss {loss.item():.5f}, LR {lr:.6f}, ACC {acc.item():.2f}%")
-        epoch += 1
-
-    visualize_embeddings(s, trainLoader, method='tsne')
+    # trainloader = train_loader()
+    # trainLoader = torch.utils.data.DataLoader(
+    #     trainloader, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=False, drop_last=True,
+    #     persistent_workers=False
+    # )
+    #
+    # EERs = []
+    # epoch = 1
+    #
+    # while epoch <= MAX_EPOCH:
+    #     loss, lr, acc = s.train_network(epoch=epoch, loader=trainLoader)
+    #     print(f"Epoch {epoch}: Loss {loss.item():.5f}, LR {lr:.6f}, ACC {acc.item():.2f}%")
+    #
+    #     if epoch % TEST_STEP == 0:
+    #         model_save_path = f"{SAVE_PATH}/model4_{epoch:04d}.model"
+    #         s.save_parameters(model_save_path)
+    #         EER = s.eval_network()[0]
+    #         EERs.append(EER)
+    #         print(f"Epoch {epoch}: Loss {loss.item():.5f}, LR {lr:.6f}, ACC {acc.item():.2f}%")
+    #     epoch += 1
+    #
+    # visualize_embeddings(s, trainLoader, method='tsne')

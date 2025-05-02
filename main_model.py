@@ -100,3 +100,7 @@ class ECAPAModel(nn.Module):
     def extract_embedding(self, x):
         with torch.no_grad():
             return F.normalize(self.speaker_encoder.forward(x.to(device), aug=False), p=2, dim=1)
+
+    def forward(self, x):
+        with torch.no_grad():
+            return self.speaker_encoder.forward(x.to(device), aug=False)

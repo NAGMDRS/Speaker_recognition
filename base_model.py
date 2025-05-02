@@ -1,7 +1,5 @@
 import math, torch
 import torch.nn as nn
-import numpy as np
-import matplotlib.pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -23,6 +21,7 @@ def mel_filter_bank(n_mels=80, n_fft=512, sample_rate=16000, f_min=20, f_max=760
             filter_bank[i - 1, j] = (j - left) / (center - left)
         for j in range(center, right):
             filter_bank[i - 1, j] = (right - j) / (right - center)
+
     return filter_bank
 
 
@@ -76,13 +75,14 @@ class Bottle2neck(nn.Module):
             convs.append(
                 nn.Conv1d(width, width, kernel_size=kernel_size, dilation=dilation, padding=num_pad).to(device))
             bns.append(nn.BatchNorm1d(width).to(device))
-        self.convs = nn.ModuleList(convs)
-        self.bns = nn.ModuleList(bns)
+
+        self.convs = nn.ModuleList(convs).to(device)
+        self.bns = nn.ModuleList(bns).to(device)
         self.conv3 = nn.Conv1d(width * scale, planes, kernel_size=1).to(device)
         self.bn3 = nn.BatchNorm1d(planes).to(device)
         self.relu = nn.ReLU().to(device)
-        self.se = SEModule(planes).to(device)
         self.width = width
+        self.se = SEModule(planes).to(device)
 
     def forward(self, x):
         residual = x
@@ -102,20 +102,22 @@ class Bottle2neck(nn.Module):
                 out = sp
             else:
                 out = torch.cat((out, sp), 1)
+
         out = torch.cat((out, spx[self.nums]), 1)
         out = self.conv3(out)
         out = self.relu(out)
         out = self.bn3(out)
         out = self.se(out)
         out += residual
+
         return out
 
 
 class ECAPA_TDNN(nn.Module):
     def __init__(self, C):
         super(ECAPA_TDNN, self).__init__()
-        self.torchfbank = CustomMelSpectrogram(sample_rate=16000, n_fft=512,
-                                               win_length=400, hop_length=160, n_mels=80).to(device)
+        self.torchfbank = CustomMelSpectrogram(sample_rate=16000, n_fft=512, win_length=400, hop_length=160,
+                                               n_mels=80).to(device)
         self.conv1 = nn.Conv1d(80, C, kernel_size=5, stride=1, padding=2).to(device)
         self.relu = nn.ReLU().to(device)
         self.bn1 = nn.BatchNorm1d(C).to(device)
@@ -135,13 +137,13 @@ class ECAPA_TDNN(nn.Module):
         self.fc6 = nn.Linear(3072, 256).to(device)
         self.bn6 = nn.BatchNorm1d(256).to(device)
 
-    # Added return_attention flag and logic to capture intermediate attention maps
-    def forward(self, x, aug=False, return_attention=False):
+    def forward(self, x, aug=False):
         x = x.to(device)
         with torch.no_grad():
             x = self.torchfbank(x) + 1e-6
             x = x.log()
             x = x - torch.mean(x, dim=-1, keepdim=True)
+
             if aug:
                 x = self.apply_spec_augment(x)
 
@@ -153,23 +155,9 @@ class ECAPA_TDNN(nn.Module):
         x3 = self.layer3(x + x1 + x2)
         x = self.layer4(torch.cat((x1, x2, x3), dim=1))
         x = self.relu(x)
-
         t = x.size()[-1]
-        global_x = torch.cat((
-            x,
-            torch.mean(x, dim=2, keepdim=True).repeat(1, 1, t),
-            torch.sqrt(torch.var(x, dim=2, keepdim=True).clamp(min=1e-4)).repeat(1, 1, t)
-        ), dim=1)
-
-        if return_attention:
-            # CHANGED: capture outputs after each layer in self.attention
-            feats = []
-            f = global_x
-            for layer in self.attention:
-                f = layer(f)
-                feats.append(f.detach().cpu().squeeze(0))  # [channels, time]
-            return feats
-            
+        global_x = torch.cat((x, torch.mean(x, dim=2, keepdim=True).repeat(1, 1, t),
+                              torch.sqrt(torch.var(x, dim=2, keepdim=True).clamp(min=1e-4)).repeat(1, 1, t)), dim=1)
         w = self.attention(global_x)
         mu = torch.sum(x * w, dim=2)
         sg = torch.sqrt((torch.sum((x ** 2) * w, dim=2) - mu ** 2).clamp(min=1e-4))
@@ -177,60 +165,28 @@ class ECAPA_TDNN(nn.Module):
         x = self.bn5(x)
         x = self.fc6(x)
         x = self.bn6(x)
-        if return_attention:
-            return x, w
         return x
 
     def apply_spec_augment(self, x, freq_mask=10, time_mask=10):
+        """
+        Applies SpecAugment (Frequency and Time Masking)
+        :param x: Mel spectrogram
+        :param freq_mask: Max frequency masking width
+        :param time_mask: Max time masking width
+        :return: Augmented Mel spectrogram
+        """
         batch_size, channels, time_steps = x.shape
+
         # Frequency Masking
         for _ in range(2):
             f = torch.randint(0, freq_mask, (1,)).item()
             f0 = torch.randint(0, channels - f, (1,)).item()
             x[:, f0:f0 + f, :] = 0
+
         # Time Masking
         for _ in range(2):
             t = torch.randint(0, time_mask, (1,)).item()
             t0 = torch.randint(0, time_steps - t, (1,)).item()
             x[:, :, t0:t0 + t] = 0
+
         return x
-
-
-# helper to plot the intermediate attention activations
-def plot_intermediate_attention_heatmaps(feats):
-    """
-    feats: list of [channels × time_frames] tensors
-    Plots each as a heatmap (channels on y, time on x).
-    """
-    names = [
-        'Conv1d→256',
-        'ReLU',
-        'BatchNorm1d',
-        'Tanh',
-        'Conv1d→1536',
-        'Softmax',
-    ]
-    for i, feat in enumerate(feats):
-        plt.figure(figsize=(8, 4))
-        # feat is on CPU, shape [C, T]
-        plt.imshow(feat.numpy(), aspect='auto', origin='lower')
-        plt.title(names[i])
-        plt.xlabel('Time Frame')
-        plt.ylabel('Channel')
-        plt.colorbar(label='Activation')
-        plt.tight_layout()
-        plt.show()
-
-
-if __name__ == "__main__":
-    C = 512
-    model = ECAPA_TDNN(C).to(device)
-
-    # 1s of dummy audio
-    waveform = torch.randn(16000, device=device)
-
-    # get intermediate attention maps
-    feats = model(waveform.unsqueeze(0), return_attention=True)
-
-    # now plot them as heat‐maps
-    plot_intermediate_attention_heatmaps(feats)

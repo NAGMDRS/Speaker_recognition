@@ -5,24 +5,21 @@ from helperFiles.tools import tuneThresholdfromScore, ComputeErrorRates, Compute
 from helperFiles.losses import AAMsoftmax
 from base_model import ECAPA_TDNN
 
+# Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 
 class ECAPAModel(nn.Module):
-    #initializing the model
     def __init__(self, C, n_class, m, s, lr=0.001, lr_decay=0.97, test_step=1, **kwargs):
         super(ECAPAModel, self).__init__()
         self.speaker_encoder = ECAPA_TDNN(C=C).to(device)
-        #Loss function : AAMSoftmax Loss - good for speaker recognition; adds angular marging between classes
         self.speaker_loss = AAMsoftmax(n_class=n_class, m=m, s=s).to(device)
         self.optim = torch.optim.Adam(self.parameters(), lr=lr, weight_decay=2e-5)
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optim, step_size=test_step, gamma=lr_decay)
         num_params = sum(param.numel() for param in self.speaker_encoder.parameters()) / (1024 * 1024)
-        #Prinitng total number of parameters
         print(time.strftime("%m-%d %H:%M:%S") + f" Model parameter number = {num_params:.2f} MB")
 
-    #Returns average loss, learning rate, training accuracy
     def train_network(self, epoch, loader):
         self.train()
         self.scheduler.step(epoch - 1)
@@ -104,7 +101,3 @@ class ECAPAModel(nn.Module):
     def extract_embedding(self, x):
         with torch.no_grad():
             return F.normalize(self.speaker_encoder.forward(x.to(device), aug=False), p=2, dim=1)
-
-    def forward(self, x):
-        with torch.no_grad():
-            return self.speaker_encoder.forward(x.to(device), aug=False)

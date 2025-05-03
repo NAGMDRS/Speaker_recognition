@@ -46,7 +46,8 @@ We use **speaker verification** metrics rather than plain classification accurac
 ---
 
 ## Project Structure
-.
+
+```bash
 ├── base_model.py # Core ECAPA-TDNN architecture and mel spectrogram frontend
 ├── main_model.py # Model training, evaluation, and inference wrapper
 ├── train_model.py # Training loop and t-SNE embedding visualization
@@ -61,8 +62,9 @@ We use **speaker verification** metrics rather than plain classification accurac
 ├── Images/ # Plots of attention visualizations
 ├── Results/ # Optional output directory for scores/results
 └── README.md # Project overview and documentation
+```
 
-
+---
 ## References
 
 - [ECAPA-TDNN: Desplanques et al., 2020](https://arxiv.org/abs/2005.07143)

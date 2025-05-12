@@ -1,0 +1,19 @@
+paths:
+  train_list: "params/train_list.txt"
+  eval_list: "params/eval_list.txt"
+  results_dir: "Results/"
+  logs_dir: "logs/"
+  model_save_path: "checkpoints/model.pth"
+
+training:
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 50
+
+audio:
+  sample_rate: 16000
+  n_mfcc: 13
+
+misc:
+  seed: 42
+  device: "cuda"

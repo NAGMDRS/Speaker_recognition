@@ -8,6 +8,7 @@ from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from helperFiles.dataLoader import train_loader
 from main_model import ECAPAModel
+from cfg import cfg
 
 
 def visualize_embeddings(model, data_loader, num_samples=500, method='tsne'):
@@ -50,12 +51,12 @@ def visualize_embeddings(model, data_loader, num_samples=500, method='tsne'):
 
 
 # ====== Configuration ======
-NUM_FRAMES = 200
-MAX_EPOCH = 15
-BATCH_SIZE = 128
-N_CLASS = 24
-SAVE_PATH = "Speaker_recognition-main/exps/exp1"
-TEST_STEP = 40
+NUM_FRAMES = cfg['training']['NUM_FRAMES']
+MAX_EPOCH = cfg['training']['MAX_EPOCH']
+BATCH_SIZE = cfg['training']['BATCH_SIZE']
+N_CLASS = cfg['training']['N_CLASS']
+SAVE_PATH = cfg['paths']['SAVE_PATH']
+TEST_STEP = cfg['training']['TEST_STEP']
 
 # Ensure save path exists
 try:

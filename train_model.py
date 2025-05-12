@@ -1,8 +1,51 @@
 import torch  
+torch.cuda.empty_cache()  # Clear GPU memory if previously allocated  
+  
+import matplotlib.pyplot as plt  
+import numpy as np  
+from sklearn.manifold import TSNE  
+from sklearn.decomposition import PCA  
 from helperFiles.dataLoader import train_loader  
 from main_model import ECAPAModel  
-from visualization import visualize_embeddings  
-import config as cfg  # Import the configuration  
+import config as cfg  # Import the configuration   
+
+
+def visualize_embeddings(model, data_loader, num_samples=500, method='tsne'):  
+    """  
+    Reduces and visualizes speaker embeddings in 2D using t-SNE or PCA.  
+  
+    Args:  
+        model (ECAPAModel): Trained model used to extract embeddings.  
+        data_loader (DataLoader): DataLoader containing the audio data.  
+        num_samples (int): Max number of samples to use for visualization.  
+        method (str): 'tsne' or 'pca' for dimensionality reduction.  
+  
+    Saves:  
+        A scatter plot of reduced embeddings as 'IndianVoxCeleb.png'.  
+    """  
+    model.to(cfg.DEVICE)  
+    model.eval()  
+    embeddings, labels = [], []  
+  
+    with torch.no_grad():  
+        for i, (data, label) in enumerate(data_loader):  
+            if i * len(data) > num_samples:  
+                break  
+            data = data.to(cfg.DEVICE)  
+            embed = model.extract_embedding(data)  
+            embeddings.append(embed.cpu().numpy())  
+            labels.extend(label.cpu().numpy())  
+  
+    embeddings = np.vstack(embeddings)  
+  
+    reducer = TSNE(n_components=2, perplexity=30, random_state=42) if method == 'tsne' else PCA(n_components=2)  
+    reduced_embeddings = reducer.fit_transform(embeddings)  
+  
+    plt.figure(figsize=(10, 8))  
+    plt.scatter(reduced_embeddings[:, 0], reduced_embeddings[:, 1], c=labels, cmap='jet', alpha=0.7)  
+    plt.colorbar()  
+    plt.savefig("Speaker_recognition-main/params/IndianVoxCeleb.png")  
+    plt.close()  
   
 if __name__ == '__main__':  
     """  

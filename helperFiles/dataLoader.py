@@ -30,7 +30,6 @@ class train_loader(object):
             file_name = os.path.join(train_path, line.split()[1]).replace("\\", "/")  # Fix backslashes  
             self.data_label.append(speaker_label)  
             self.data_list.append(file_name)  
-      
 
 def __getitem__(self, index):  
         # Read the utterance and randomly select the segment  
@@ -50,7 +49,7 @@ def __getitem__(self, index):
         audio = audio[start_frame:start_frame + length]  
         audio = numpy.stack([audio], axis=0)  
           
-        return torch.FloatTensor(audio[0]).to(cfg.DEVICE), torch.tensor(self.data_label[index], dtype=torch.long).to(cfg.DEVICE)  
+        return torch.FloatTensor(audio[0]).to(cfg.DEVICE), torch.tensor(self.data_label[index], dtype=torch.long).to(cfg.DEVICE)
       
 
 

@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from helperFiles.tools import tuneThresholdfromScore, ComputeErrorRates, ComputeMinDcf
 from helperFiles.losses import AAMsoftmax
 from base_model import ECAPA_TDNN
+from cfg import cfg
 
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

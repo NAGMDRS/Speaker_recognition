@@ -1,15 +1,46 @@
 # Speaker Recognition using ECAPA-TDNN
 
-This repository provides an end-to-end pipeline for speaker recognition using the **ECAPA-TDNN** architecture. It includes preprocessing with custom mel spectrograms, a robust attention-based encoder, and tools for visualizing both embeddings and attention maps. The system outputs **192-dimensional embeddings** suitable for speaker identification and verification.
+This speaker recognition system is designed to:
+
+- **1.** Extract 256-dimensional speaker embeddings from raw audio waveforms
+- **2.** Provide robust speaker recognition across varying acoustic conditions
+- **3.** Implement state-of-the-art architectural innovations including channel attention and multi-scale feature extraction
+- **4.** Support both training and evaluation workflows for speaker recognition tasks
 
 ---
 
 ## Overview
 
+![image alt](https://github.com/vedsub/Speaker_recognition/blob/main/ecapa-tdnn%20archi.jpg?raw=true)
+
 **ECAPA-TDNN (Emphasized Channel Attention, Propagation and Aggregation in TDNN)** enhances traditional TDNNs for speaker recognition by integrating:
 - **SE-Res2Blocks** for multi-scale temporal modeling
 - **Attentive statistical pooling** to focus on speaker-relevant frames
 - **Channel attention** for frequency-wise feature refinement
+
+---
+### System Architecture
+
+![image alt](https://github.com/vedsub/Speaker_recognition/blob/main/sys_arch.jpg?raw=true)
+
+The system consists of three main components:
+
+1) **ECAPA_TDNN** (in base_model.py): The core neural network architecture that transforms raw audio into speaker embeddings
+2) **ECAPAModel** (in main_model.py): A wrapper class that integrates the model with training, evaluation, and embedding extraction functionality
+3) **Training Pipeline**: Manages data loading, model training, and visualization
+   These components interact with helper modules for loss calculation, evaluation metrics, and data loading to form a complete speaker recognition system.
+
+---
+### Data Flow
+
+![image alt](https://github.com/vedsub/Speaker_recognition/blob/main/data_flow.jpg?raw=true)
+
+The data flow includes:
+
+-  **Input Processing:** Raw audio is converted to mel spectrograms using CustomMelSpectrogram
+-  **Feature Extraction:** The ECAPA-TDNN model processes the spectrograms through convolutional layers and Bottle2neck blocks
+-  **Embedding Generation:**  Attentive statistical pooling and fully connected layers produce a 256-dimensional speaker embedding
+-  **Training/Evaluation:** The embeddings are used either for training (with AAMsoftmax loss) or evaluation (through cosine similarity and metrics calculation)
 
 ---
 
@@ -32,7 +63,7 @@ Why choosing ECAPA-TDNN over vanilla TDNNs, traditional LSTMs, or CNNs? Here are
 
 ## Evaluation Metrics
 
-We use **speaker verification** metrics rather than plain classification accuracy:
+The system uses two primary metrics for evaluating speaker recognition performance:
 
 ###  Equal Error Rate (EER)  
 - Point where false acceptance rate = false rejection rate  
@@ -42,6 +73,16 @@ We use **speaker verification** metrics rather than plain classification accurac
 - Measures trade-off between miss and false alarm costs  
 - Incorporates prior probability of target speaker
 
+These metrics are calculated in the `eval_network` method using functions from `helperFiles/tools.py`:
+
+
+---
+### System Workflow
+
+The overall workflow of the speaker recognition system can be summarized as follows:
+![image alt](https://github.com/vedsub/Speaker_recognition/blob/main/stsem_workflow.jpg?raw=true)
+
+This workflow illustrates the different phases in using the speaker recognition system, from preprocessing audio files to training the model and evaluating its performance.
 
 ---
 
@@ -74,4 +115,3 @@ We use **speaker verification** metrics rather than plain classification accurac
 ## License
 
 This project is licensed under the **MIT License**.
-

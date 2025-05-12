@@ -9,6 +9,20 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def visualize_attention_from_loader(model, dataloader, save_path="attention_plot.png"):
+    """
+    Visualizes attention over mel spectrograms using a trained ECAPA-TDNN model.
+
+    This function extracts the attention weights from the ECAPA model, overlays them on 
+    the corresponding mel spectrogram, and plots both the raw waveform and attention visualization.
+
+    Args:
+        model (ECAPAModel): Trained ECAPA-TDNN model.
+        dataloader (DataLoader): PyTorch DataLoader providing waveform batches.
+        save_path (str): File path to save the attention visualization plot.
+
+    Returns:
+        None. The function saves a figure to `save_path`.
+    """
     model.eval()
 
     for batch in dataloader:
@@ -16,16 +30,19 @@ def visualize_attention_from_loader(model, dataloader, save_path="attention_plot
         waveform = waveform.to(device)
 
         with torch.no_grad():
+            # Ensure minimum length for valid STFT
             min_length = 512
             if waveform.shape[-1] < min_length:
                 pad_amount = min_length - waveform.shape[-1]
                 padding_tuple = (0, pad_amount, 0, 0)
                 waveform = F.pad(waveform, padding_tuple, mode="reflect")
 
+            # Compute log mel spectrogram
             mel = model.speaker_encoder.torchfbank(waveform) + 1e-6
             mel = mel.log()
             mel = mel - torch.mean(mel, dim=-1, keepdim=True)
 
+            # Forward pass through ECAPA front-end layers
             x = model.speaker_encoder.conv1(mel)
             x = model.speaker_encoder.relu(x)
             x = model.speaker_encoder.bn1(x)
@@ -36,20 +53,24 @@ def visualize_attention_from_loader(model, dataloader, save_path="attention_plot
             x = model.speaker_encoder.layer4(torch.cat((x1, x2, x3), dim=1))
             x = model.speaker_encoder.relu(x)
 
-            t = x.size()[-1]  # Number of time frames in the feature map
+            # Prepare input for attention
+            t = x.size()[-1]
             global_x = torch.cat((
                 x,
                 torch.mean(x, dim=2, keepdim=True).repeat(1, 1, t),
                 torch.sqrt(torch.var(x, dim=2, keepdim=True).clamp(min=1e-4)).repeat(1, 1, t)
             ), dim=1)
 
+            # Compute attention weights
             w = model.speaker_encoder.attention(global_x)
             avg_attn = w.mean(dim=1)
 
+            # Convert tensors to NumPy for plotting
             avg_attn_np = avg_attn.squeeze().cpu().numpy()
             mel_np = mel.squeeze().cpu().numpy()
             waveform_np = waveform.squeeze().cpu().numpy()
 
+            # Create plot: waveform + mel spectrogram with attention overlay
             fig, axs = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
 
             axs[0].plot(waveform_np)
@@ -60,7 +81,7 @@ def visualize_attention_from_loader(model, dataloader, save_path="attention_plot
                                 extent=[0, waveform_np.shape[0], 0, mel_np.shape[0]])
 
             time_frames_indices = np.arange(avg_attn_np.shape[0])
-            hop_length = model.speaker_encoder.torchfbank.hop_length  # Get hop length (160)
+            hop_length = model.speaker_encoder.torchfbank.hop_length
             audio_sample_indices = time_frames_indices * hop_length
 
             min_attn = np.min(avg_attn_np)
@@ -72,32 +93,39 @@ def visualize_attention_from_loader(model, dataloader, save_path="attention_plot
                 scaled_attention = (avg_attn_np - min_attn) / (max_attn - min_attn) * mel_np.shape[0]
 
             axs[1].plot(audio_sample_indices, scaled_attention, color='red', label='Attention', linewidth=2)
-
             axs[1].legend()
             axs[1].set_title("Mel Spectrogram + Attention")
-            axs[1].set_xlabel("Time Frame (Audio Samples)")  # Added clarification
-            axs[1].set_ylabel("Mel Channel Index / Attention Scale")  # Added clarification
+            axs[1].set_xlabel("Time Frame (Audio Samples)")
+            axs[1].set_ylabel("Mel Channel Index / Attention Scale")
             plt.colorbar(img, ax=axs[1], format='%+2.0f dB')
 
             plt.tight_layout()
             plt.savefig(save_path)
             plt.close()
-
         break
 
 
 if __name__ == "__main__":
+    """
+    Loads a pretrained ECAPA-TDNN model and visualizes attention on one training sample.
 
+    This script is intended to be run directly. It will:
+    - Load a model checkpoint
+    - Load the training dataset
+    - Generate and save a visualization of attention overlayed on mel spectrogram
+    """
     model = ECAPAModel(C=1024, m=0.2, s=30, n_class=24).to(device)
     try:
         model.load_state_dict(
-            torch.load("/home/btech10154.22/Speaker_recognition-main/exps/exp1/model4_0005.model", map_location=device))
+            torch.load("/home/btech10154.22/Speaker_recognition-main/exps/exp1/model4_0005.model", map_location=device)
+        )
     except RuntimeError as e:
         print(f"Error loading model state_dict: {e}")
         print("Attempting to load with strict=False (ignoring mismatched keys in feature extractor)")
         model.load_state_dict(
             torch.load("/home/btech10154.22/Speaker_recognition-main/exps/exp1/model4_0005.model", map_location=device),
-            strict=False)
+            strict=False
+        )
 
     dataset = train_loader()
     trainDataLoader = torch.utils.data.DataLoader(
@@ -110,5 +138,8 @@ if __name__ == "__main__":
         persistent_workers=False
     )
 
-    visualize_attention_from_loader(model, trainDataLoader,
-                                    save_path="/home/btech10154.22/Speaker_recognition-main/Images/ecapa_attention_output.png")
+    visualize_attention_from_loader(
+        model,
+        trainDataLoader,
+        save_path="/home/btech10154.22/Speaker_recognition-main/Images/ecapa_attention_output.png"
+    )

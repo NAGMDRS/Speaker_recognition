@@ -6,6 +6,22 @@ print(f"Using device: {device}")
 
 
 def mel_filter_bank(n_mels=80, n_fft=512, sample_rate=16000, f_min=20, f_max=7600):
+    """
+    Creates a Mel filter bank matrix to convert a power spectrogram into a Mel spectrogram.
+
+    This function calculates triangular filters spaced according to the Mel scale and 
+    maps linear frequency bins (from the FFT) into Mel-scaled frequency bins.
+
+    Args:
+        n_mels (int): Number of Mel filters.
+        n_fft (int): Number of FFT components.
+        sample_rate (int): Audio sample rate.
+        f_min (float): Minimum frequency to include in the Mel scale.
+        f_max (float): Maximum frequency to include in the Mel scale.
+
+    Returns:
+        torch.Tensor: Mel filter bank matrix of shape (n_mels, n_fft // 2 + 1).
+    """
     mel_scale = torch.linspace(
         1125 * math.log(1 + f_min / 700.0),
         1125 * math.log(1 + f_max / 700.0),
@@ -26,7 +42,22 @@ def mel_filter_bank(n_mels=80, n_fft=512, sample_rate=16000, f_min=20, f_max=760
 
 
 class CustomMelSpectrogram(nn.Module):
+    """
+    Computes the Mel spectrogram from a raw waveform using a custom implementation.
+
+    Uses short-time Fourier transform (STFT) followed by a Mel filter bank projection.
+    """
     def __init__(self, sample_rate=16000, n_fft=512, win_length=400, hop_length=160, n_mels=80):
+        """
+        Initializes the parameters for Mel spectrogram computation.
+
+        Args:
+            sample_rate (int): Audio sample rate in Hz.
+            n_fft (int): Number of FFT bins.
+            win_length (int): Length of each STFT window.
+            hop_length (int): Hop size between windows.
+            n_mels (int): Number of Mel filters.
+        """
         super().__init__()
         self.n_fft = n_fft
         self.win_length = win_length
@@ -36,6 +67,15 @@ class CustomMelSpectrogram(nn.Module):
         self.mel_filter = mel_filter_bank(n_mels, n_fft, sample_rate)
 
     def forward(self, waveform):
+        """
+        Computes the Mel spectrogram from a given waveform.
+
+        Args:
+            waveform (Tensor): Audio waveform of shape (batch, time).
+
+        Returns:
+            Tensor: Mel spectrogram of shape (batch, n_mels, frames).
+        """
         stft = torch.stft(
             waveform.to(device), n_fft=self.n_fft, hop_length=self.hop_length,
             win_length=self.win_length, window=self.window,
@@ -47,7 +87,18 @@ class CustomMelSpectrogram(nn.Module):
 
 
 class SEModule(nn.Module):
+    """
+    Implements the Squeeze-and-Excitation (SE) attention mechanism.
+
+    Dynamically recalibrates channel-wise feature responses by explicitly modelling
+    interdependencies between channels.
+    """
     def __init__(self, channels, bottleneck=128):
+        """
+        Args:
+            channels (int): Number of input and output channels.
+            bottleneck (int): Number of channels in the bottleneck layer.
+        """
         super(SEModule, self).__init__()
         self.se = nn.Sequential(
             nn.AdaptiveAvgPool1d(1),
@@ -58,12 +109,35 @@ class SEModule(nn.Module):
         )
 
     def forward(self, input):
+        """
+        Applies channel-wise attention.
+
+        Args:
+            input (Tensor): Input feature map of shape (batch, channels, time).
+
+        Returns:
+            Tensor: Recalibrated feature map of same shape.
+        """
         x = self.se(input)
         return input * x
 
 
 class Bottle2neck(nn.Module):
+    """
+    A Res2Net-based bottleneck block for multi-scale feature extraction.
+
+    Splits channels into groups and applies convolution to each sequentially to capture
+    diverse receptive fields. Includes SE attention for channel weighting.
+    """
     def __init__(self, inplanes, planes, kernel_size=3, dilation=2, scale=8):
+        """
+        Args:
+            inplanes (int): Number of input channels.
+            planes (int): Number of output channels.
+            kernel_size (int): Kernel size for convolutions.
+            dilation (int): Dilation rate for temporal convolution.
+            scale (int): Number of feature groups to split input into.
+        """
         super(Bottle2neck, self).__init__()
         width = int(math.floor(planes / scale))
         self.conv1 = nn.Conv1d(inplanes, width * scale, kernel_size=1).to(device)
@@ -85,6 +159,15 @@ class Bottle2neck(nn.Module):
         self.se = SEModule(planes).to(device)
 
     def forward(self, x):
+        """
+        Applies grouped convolutions followed by residual and SE attention.
+
+        Args:
+            x (Tensor): Input tensor of shape (batch, channels, time).
+
+        Returns:
+            Tensor: Output tensor of same shape after bottleneck processing.
+        """
         residual = x
         out = self.conv1(x)
         out = self.bn1(out)
@@ -114,10 +197,19 @@ class Bottle2neck(nn.Module):
 
 
 class ECAPA_TDNN(nn.Module):
+    """
+    ECAPA-TDNN model for extracting speaker embeddings from raw audio.
+
+    Integrates multi-layer bottleneck blocks, attentive statistical pooling,
+    and dimensionality reduction layers to output a fixed-size embedding.
+    """
     def __init__(self, C):
+        """
+        Args:
+            C (int): Number of channels for intermediate convolution layers.
+        """
         super(ECAPA_TDNN, self).__init__()
-        self.torchfbank = CustomMelSpectrogram(sample_rate=16000, n_fft=512, win_length=400, hop_length=160,
-                                               n_mels=80).to(device)
+        self.torchfbank = CustomMelSpectrogram().to(device)
         self.conv1 = nn.Conv1d(80, C, kernel_size=5, stride=1, padding=2).to(device)
         self.relu = nn.ReLU().to(device)
         self.bn1 = nn.BatchNorm1d(C).to(device)
@@ -138,6 +230,16 @@ class ECAPA_TDNN(nn.Module):
         self.bn6 = nn.BatchNorm1d(256).to(device)
 
     def forward(self, x, aug=False):
+        """
+        Computes a speaker embedding from an audio waveform.
+
+        Args:
+            x (Tensor): Input waveform of shape (batch, time).
+            aug (bool): Whether to apply SpecAugment.
+
+        Returns:
+            Tensor: Speaker embedding of shape (batch, 256).
+        """
         x = x.to(device)
         with torch.no_grad():
             x = self.torchfbank(x) + 1e-6
@@ -169,21 +271,23 @@ class ECAPA_TDNN(nn.Module):
 
     def apply_spec_augment(self, x, freq_mask=10, time_mask=10):
         """
-        Applies SpecAugment (Frequency and Time Masking)
-        :param x: Mel spectrogram
-        :param freq_mask: Max frequency masking width
-        :param time_mask: Max time masking width
-        :return: Augmented Mel spectrogram
+        Applies SpecAugment for data augmentation by masking frequency and time bands.
+
+        Args:
+            x (Tensor): Mel spectrogram input of shape (batch, channels, time).
+            freq_mask (int): Maximum width of frequency masking.
+            time_mask (int): Maximum width of time masking.
+
+        Returns:
+            Tensor: Augmented Mel spectrogram.
         """
         batch_size, channels, time_steps = x.shape
 
-        # Frequency Masking
         for _ in range(2):
             f = torch.randint(0, freq_mask, (1,)).item()
             f0 = torch.randint(0, channels - f, (1,)).item()
             x[:, f0:f0 + f, :] = 0
 
-        # Time Masking
         for _ in range(2):
             t = torch.randint(0, time_mask, (1,)).item()
             t0 = torch.randint(0, time_steps - t, (1,)).item()

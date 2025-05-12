@@ -1,5 +1,6 @@
 import math, torch
 import torch.nn as nn
+from cfg import cfg
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")

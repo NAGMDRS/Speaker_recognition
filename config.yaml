@@ -1,0 +1,21 @@
+paths:
+  train_list: "params/train_list.txt"
+  eval_list: "params/eval_list.txt"
+  results_dir: "Results/"
+  logs_dir: "logs/"
+  model_save_path: "Speaker_recognition-main/exps/exp1"
+  
+training:
+  NUM_FRAMES: 200
+  MAX_EPOCH: 15
+  BATCH_SIZE: 128
+  N_CLASS: 24
+  TEST_STEP: 40
+  
+audio:
+  sample_rate: 16000
+  n_mfcc: 13
+
+misc:
+  seed: 42
+  device: "cuda"

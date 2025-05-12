@@ -3,13 +3,15 @@ paths:
   eval_list: "params/eval_list.txt"
   results_dir: "Results/"
   logs_dir: "logs/"
-  model_save_path: "checkpoints/model.pth"
-
+  model_save_path: "Speaker_recognition-main/exps/exp1"
+  
 training:
-  batch_size: 32
-  learning_rate: 0.001
-  epochs: 50
-
+  NUM_FRAMES: 200
+  MAX_EPOCH: 15
+  BATCH_SIZE: 128
+  N_CLASS: 24
+  TEST_STEP: 40
+  
 audio:
   sample_rate: 16000
   n_mfcc: 13

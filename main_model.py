@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from helperFiles.tools import tuneThresholdfromScore, ComputeErrorRates, ComputeMinDcf
 from helperFiles.losses import AAMsoftmax
 from base_model import ECAPA_TDNN
+import config as cfg  # Import the configuration
 
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -138,41 +139,41 @@ class ECAPAModel(nn.Module):
         minDCF, _ = ComputeMinDcf(fnrs, fprs, thresholds, 0.05, 1, 1)
         return EER, minDCF
 
-    def save_parameters(self, path):
-        """
-        Saves model parameters to a file.
-
-        Args:
-            path (str): Path to save the model (.pt or .model).
-        """
-        torch.save(self.state_dict(), path)
-
-    def load_parameters(self, path):
-        """
-        Loads model parameters from a file, allowing partial matching.
-
-        Args:
-            path (str): Path to the saved model file.
-        """
-        self_state = self.state_dict()
-        loaded_state = torch.load(path, map_location=device)
-
-        for name, param in loaded_state.items():
-            origname = name.replace("module.", "") if name not in self_state else name
-            if origname in self_state and self_state[origname].size() == param.size():
-                self_state[origname].copy_(param)
-            else:
-                print(f"Skipping {origname}: shape mismatch or missing in model.")
-
-    def extract_embedding(self, x):
-        """
-        Extracts a normalized speaker embedding from raw waveform input.
-
-        Args:
-            x (Tensor): Input waveform of shape (batch, time).
-
-        Returns:
-            Tensor: L2-normalized speaker embedding of shape (batch, 192).
-        """
-        with torch.no_grad():
-            return F.normalize(self.speaker_encoder.forward(x.to(device), aug=False), p=2, dim=1)
+    def save_parameters(self, path):  
+        """  
+        Saves model parameters to a file.  
+          
+        Args:  
+            path (str): Path to save the model (.pt or .model).  
+        """  
+        torch.save(self.state_dict(), path)  
+      
+    def load_parameters(self, path):  
+        """  
+        Loads model parameters from a file, allowing partial matching.  
+          
+        Args:  
+            path (str): Path to the saved model file.  
+        """  
+        self_state = self.state_dict()  
+        loaded_state = torch.load(path, map_location=cfg.DEVICE)  
+          
+        for name, param in loaded_state.items():  
+            origname = name.replace("module.", "") if name not in self_state else name  
+            if origname in self_state and self_state[origname].size() == param.size():  
+                self_state[origname].copy_(param)  
+            else:  
+                print(f"Skipping {origname}: shape mismatch or missing in model.")  
+      
+    def extract_embedding(self, x):  
+        """  
+        Extracts a normalized speaker embedding from raw waveform input.  
+          
+        Args:  
+            x (Tensor): Input waveform of shape (batch, time).  
+          
+        Returns:  
+            Tensor: L2-normalized speaker embedding of shape (batch, 192).  
+        """  
+        with torch.no_grad():  
+            return F.normalize(self.speaker_encoder.forward(x.to(cfg.DEVICE), aug=False), p=2, dim=1)

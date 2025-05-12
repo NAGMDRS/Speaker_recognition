@@ -1,4 +1,4 @@
-
+import config as cfg  # Import the configuration
 import os, numpy
 from sklearn import metrics
 from operator import itemgetter
@@ -49,16 +49,16 @@ def ComputeErrorRates(scores, labels):
     fprs = [1 - x / float(fprs_norm) for x in fprs]
     return fnrs, fprs, thresholds
 
-def ComputeMinDcf(fnrs, fprs, thresholds, p_target, c_miss, c_fa):
-    min_c_det = float("inf")
-    min_c_det_threshold = thresholds[0]
-    for i in range(0, len(fnrs)):
-        c_det = c_miss * fnrs[i] * p_target + c_fa * fprs[i] * (1 - p_target)
-        if c_det < min_c_det:
-            min_c_det = c_det
-            min_c_det_threshold = thresholds[i]
-    c_def = min(c_miss * p_target, c_fa * (1 - p_target))
-    min_dcf = min_c_det / c_def
+def ComputeMinDcf(fnrs, fprs, thresholds, p_target=cfg.P_TARGET, c_miss=cfg.C_MISS, c_fa=cfg.C_FA):  
+    min_c_det = float("inf")  
+    min_c_det_threshold = thresholds[0]  
+    for i in range(0, len(fnrs)):  
+        c_det = c_miss * fnrs[i] * p_target + c_fa * fprs[i] * (1 - p_target)  
+        if c_det < min_c_det:  
+            min_c_det = c_det  
+            min_c_det_threshold = thresholds[i]  
+    c_def = min(c_miss * p_target, c_fa * (1 - p_target))  
+    min_dcf = min_c_det / c_def  
     return min_dcf, min_c_det_threshold
 
 

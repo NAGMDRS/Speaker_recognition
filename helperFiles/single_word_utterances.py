@@ -8,13 +8,19 @@ from pydub import AudioSegment
 vad = webrtcvad.Vad(3)
 
 def preprocess_audio(audio_path, target_sr=16000):
-    """Ensure the audio is 16kHz, 16-bit PCM, mono"""
+    """
+    Convert audio to 16kHz, 16-bit PCM, mono format.
+
+    Args:
+        audio_path (str): Path to the input audio file.
+        target_sr (int): Target sample rate in Hz (default is 16000).
+
+    Returns:
+        str: Path to the processed audio file.
+    """
     print(f"[INFO] Preprocessing {audio_path}...")
 
     audio = AudioSegment.from_file(audio_path)
-    # print(f" - Original Sample Rate: {audio.frame_rate} Hz")
-    # print(f" - Channels: {audio.channels}")
-    # print(f" - Sample Width: {audio.sample_width * 8} bits")
 
     audio = audio.set_frame_rate(target_sr).set_sample_width(2).set_channels(1)
     processed_path = audio_path.replace(".wav", "_processed.wav")
@@ -24,16 +30,20 @@ def preprocess_audio(audio_path, target_sr=16000):
     return processed_path
 
 def get_speech_segments(audio_path, output_dir,file_name,sr=16000, frame_length=30):
-    """Detect speech segments and save them as separate WAV files"""
+    """
+    Detect speech segments in an audio file and save them as separate WAV files.
 
+    Args:
+        audio_path (str): Path to the input audio file.
+        output_dir (str): Directory where speech segments will be saved.
+        file_name (str): Original file name (used for naming output files).
+        sr (int): Sampling rate (default is 16000).
+        frame_length (int): Frame size in milliseconds (default is 30).
+    """
     audio_path = preprocess_audio(audio_path, sr)
 
     waveform, sample_rate = torchaudio.load(audio_path)
     waveform = waveform.numpy().squeeze()
-
-    # print(f"[DEBUG] Processing file: {audio_path}")
-    # print(f" - Loaded Sample Rate: {sample_rate} Hz")
-    # print(f" - Audio Length: {len(waveform) / sample_rate:.2f} sec")
 
     if sample_rate != sr:
         print("[ERROR] Sample rate mismatch! Resample to 16kHz before processing.")
@@ -91,6 +101,10 @@ def get_speech_segments(audio_path, output_dir,file_name,sr=16000, frame_length=
 
 
 def process_and_segment():
+    """
+    Traverse the dataset directory structure and apply preprocessing
+    and speech segmentation to all audio files.
+    """
     directory = "F:/Datasets/IndianVoxCeleb/vox_indian"
     folders = os.listdir(directory)
 

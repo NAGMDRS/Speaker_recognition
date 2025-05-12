@@ -5,6 +5,15 @@ from operator import itemgetter
 
 
 def init_args(args):
+    """
+    Initialize paths for saving model and score files.
+
+    Args:
+        args (Namespace): Argument object containing a 'save_path' attribute.
+
+    Returns:
+        Namespace: Updated argument object with 'score_save_path' and 'model_save_path'.
+    """
     args.score_save_path = os.path.join(args.save_path, 'score.txt')
     args.model_save_path = os.path.join(args.save_path, 'model')
     os.makedirs(args.model_save_path, exist_ok=True)
@@ -12,6 +21,18 @@ def init_args(args):
 
 
 def tuneThresholdfromScore(scores, labels, target_fa, target_fr=None):
+    """
+    Tune score thresholds to achieve target false acceptance (FA) and false rejection (FR) rates.
+
+    Args:
+        scores (list or np.ndarray): Prediction scores.
+        labels (list or np.ndarray): Ground truth binary labels (0 or 1).
+        target_fa (list): List of target false acceptance rates.
+        target_fr (list, optional): List of target false rejection rates.
+
+    Returns:
+        tuple: (tuned thresholds, equal error rate, false positive rates, false negative rates)
+    """
     fpr, tpr, thresholds = metrics.roc_curve(labels, scores, pos_label=1)
     fnr = 1 - tpr
     tunedThreshold = [];
@@ -28,6 +49,16 @@ def tuneThresholdfromScore(scores, labels, target_fa, target_fr=None):
     return tunedThreshold, eer, fpr, fnr
 
 def ComputeErrorRates(scores, labels):
+    """
+    Compute false negative rates (FNR) and false positive rates (FPR) across thresholds.
+
+    Args:
+        scores (list or np.ndarray): Prediction scores.
+        labels (list): Corresponding binary ground truth labels (0 or 1).
+
+    Returns:
+        tuple: (list of FNRs, list of FPRs, list of thresholds)
+    """
     sorted_indexes, thresholds = zip(*sorted(
         [(index, threshold) for index, threshold in enumerate(scores)],
         key=itemgetter(1)))
@@ -50,6 +81,20 @@ def ComputeErrorRates(scores, labels):
     return fnrs, fprs, thresholds
 
 def ComputeMinDcf(fnrs, fprs, thresholds, p_target, c_miss, c_fa):
+    """
+    Compute the minimum Detection Cost Function (DCF).
+
+    Args:
+        fnrs (list): False negative rates.
+        fprs (list): False positive rates.
+        thresholds (list): Thresholds corresponding to FNR and FPR.
+        p_target (float): Prior probability of the target class.
+        c_miss (float): Cost of a miss (false negative).
+        c_fa (float): Cost of a false alarm (false positive).
+
+    Returns:
+        tuple: (minimum DCF value, threshold corresponding to minimum DCF)
+    """
     min_c_det = float("inf")
     min_c_det_threshold = thresholds[0]
     for i in range(0, len(fnrs)):
@@ -63,6 +108,17 @@ def ComputeMinDcf(fnrs, fprs, thresholds, p_target, c_miss, c_fa):
 
 
 def accuracy(output, target, topk=(1,)):
+    """
+    Compute the top-k accuracy for model predictions.
+
+    Args:
+        output (Tensor): Model output logits.
+        target (Tensor): Ground truth labels.
+        topk (tuple): Tuple of top-k values (e.g., (1,), (1, 5)).
+
+    Returns:
+        list: List of top-k accuracy values as percentages.
+    """
     maxk = max(topk)
     batch_size = target.size(0)
     _, pred = output.topk(maxk, 1, True, True)

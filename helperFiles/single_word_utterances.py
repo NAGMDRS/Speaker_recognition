@@ -4,78 +4,79 @@ import numpy as np
 import soundfile as sf
 import os
 from pydub import AudioSegment
+import multiprocessing
+from tqdm import tqdm
 
-vad = webrtcvad.Vad(3)
-
-def preprocess_audio(audio_path, target_sr=16000):
+def preprocess_audio_in_memory(audio_path, target_sr=16000):
     """
-    Convert audio to 16kHz, 16-bit PCM, mono format.
+    CHANGED: Convert audio and return it as a numpy array instead of saving a file.
 
     Args:
         audio_path (str): Path to the input audio file.
-        target_sr (int): Target sample rate in Hz (default is 16000).
+        target_sr (int): Target sample rate in Hz.
 
     Returns:
-        str: Path to the processed audio file.
+        tuple: (np.array of int16 samples, sample_rate)
     """
-    print(f"[INFO] Preprocessing {audio_path}...")
+    try:
+        audio = AudioSegment.from_file(audio_path)
+        audio = audio.set_frame_rate(target_sr).set_sample_width(2).set_channels(1)
 
-    audio = AudioSegment.from_file(audio_path)
+        # Get samples as a numpy array
+        samples = np.array(audio.get_array_of_samples()).astype(np.int16)
 
-    audio = audio.set_frame_rate(target_sr).set_sample_width(2).set_channels(1)
-    processed_path = audio_path.replace(".wav", "_processed.wav")
-    audio.export(processed_path, format="wav")
+        return samples, audio.frame_rate
+    except Exception as e:
+        print(f"[ERROR] Failed to preprocess {audio_path}: {e}")
+        return None, 0
 
-    print(f"[INFO] Converted to 16kHz, 16-bit PCM, mono -> {processed_path}")
-    return processed_path
 
-def get_speech_segments(audio_path, output_dir,file_name,sr=16000, frame_length=30):
+def get_speech_segments(vad, waveform_int16, sample_rate, output_dir, file_name, frame_length=30):
     """
-    Detect speech segments in an audio file and save them as separate WAV files.
+    CHANGED: This function now accepts the audio data directly, not a file path.
+    It also accepts the 'vad' object as an argument.
 
     Args:
-        audio_path (str): Path to the input audio file.
+        vad (webrtcvad.Vad): An instance of the VAD.
+        waveform_int16 (np.array): The audio data as int16 samples.
+        sample_rate (int): The audio sample rate (must be 16000).
         output_dir (str): Directory where speech segments will be saved.
-        file_name (str): Original file name (used for naming output files).
-        sr (int): Sampling rate (default is 16000).
-        frame_length (int): Frame size in milliseconds (default is 30).
+        file_name (str): Original file name.
+        frame_length (int): Frame size in milliseconds.
     """
-    audio_path = preprocess_audio(audio_path, sr)
 
-    waveform, sample_rate = torchaudio.load(audio_path)
-    waveform = waveform.numpy().squeeze()
-
-    if sample_rate != sr:
-        print("[ERROR] Sample rate mismatch! Resample to 16kHz before processing.")
+    if sample_rate != 16000:
+        print(f"[ERROR] Sample rate must be 16kHz, but got {sample_rate}")
         return
 
-    waveform = (waveform * 32768).astype(np.int16)
+    # CHANGED: No more torchaudio.load() or type conversion, data is ready
+    waveform = waveform_int16
 
-    valid_frame_sizes = {160, 320, 480}
-    frame_size = int(sr * frame_length / 1000)
-
-    if frame_size not in valid_frame_sizes:
-        print(f"[ERROR] Invalid frame size: {frame_size} samples")
+    # Webrtcvad supports 10, 20, or 30 ms frames
+    frame_size = int(sample_rate * frame_length / 1000)
+    if frame_size not in {160, 320, 480}:
+        print(f"[ERROR] Invalid frame size for 16kHz: {frame_size} samples")
         return
-
-    print(f"[INFO] Frame Size: {frame_size} samples ({frame_length} ms)")
 
     segments = []
     current_segment = []
 
     for i in range(0, len(waveform) - frame_size, frame_size):
         frame = waveform[i: i + frame_size]
-
         frame_bytes = frame.tobytes()
 
+        # Frame buffer size check (2 bytes per int16 sample)
         if len(frame_bytes) != frame_size * 2:
-            print(f"[ERROR] Frame buffer size mismatch: {len(frame_bytes)} bytes (expected {frame_size * 2})")
             continue
 
-        is_speech = vad.is_speech(frame_bytes, sr)
+        try:
+            is_speech = vad.is_speech(frame_bytes, sample_rate)
+        except Exception as e:
+            # This can happen if the frame is invalid
+            # print(f"VAD error: {e}")
+            is_speech = False
 
         if is_speech:
-            print(f" - Speech detected at {i / sr:.2f} sec")
             current_segment.append(frame)
         elif current_segment:
             segments.append(np.concatenate(current_segment))
@@ -84,34 +85,91 @@ def get_speech_segments(audio_path, output_dir,file_name,sr=16000, frame_length=
     if current_segment:
         segments.append(np.concatenate(current_segment))
 
-    min_word_length = 0.2
-    max_word_length = 5.0
+    # Filter segments by length
+    min_word_length = 0.2  # 200 ms
+    max_word_length = 5.0  # 5 seconds
+    sr = sample_rate
     filtered_segments = [seg for seg in segments if min_word_length * sr < len(seg) < max_word_length * sr]
 
-    print(f"[DEBUG] Filtered Segments: {filtered_segments}")
     os.makedirs(output_dir, exist_ok=True)
+
+    heppi = file_name.replace(".wav", "")  # Use os.path.splitext for robustness
+
     for i, seg in enumerate(filtered_segments):
-        heppi=file.replace(".wav", "")
-        output_file = f"{output_dir}/{[heppi]}word_{i}.wav"
-        print(output_file)
-        sf.write(output_file, seg, samplerate=sr)
-        print(f"[SAVED] {output_file}")
+        # CHANGED: Fixed file name formatting
+        output_file = os.path.join(output_dir, f"{heppi}_word_{i}.wav")
+        try:
+            sf.write(output_file, seg, samplerate=sr)
+        except Exception as e:
+            print(f"[ERROR] Failed to write {output_file}: {e}")
 
-    print("[INFO] Processing complete.\n")
 
-
-def process_and_segment():
+def process_file_worker(task_tuple):
     """
-    Traverse the dataset directory structure and apply preprocessing
-    and speech segmentation to all audio files.
+    NEW: This is the worker function that each parallel process will run.
+    It handles preprocessing and segmentation for a single file.
     """
-    directory = "F:/Datasets/IndianVoxCeleb/vox_indian"
-    folders = os.listdir(directory)
+    file_path, output_dir, file_name = task_tuple
 
-    for speakerid in folders:
-        for folder in os.listdir(directory + "/" + speakerid):
-            for file in os.listdir(directory + "/" + speakerid + "/" + folder):
-                if not (file.endswith("_processed.wav")):
-                    file_path = directory + "/" + speakerid + "/" + folder + "/" + file
-                    output_dir = "F:/Datasets/IndianVoxCeleb/vox_indian_split/"+speakerid+"/"+folder
-                    get_speech_segments(file_path, sr=16000, output_dir=output_dir, file_name=file)
+    # Each process must have its own VAD object
+    vad = webrtcvad.Vad(3)
+
+    # 1. Preprocess in memory
+    waveform_int16, sample_rate = preprocess_audio_in_memory(file_path, target_sr=16000)
+
+    if waveform_int16 is None:
+        return f"Failed: {file_path}"  # Skip this file
+
+    # 2. Get speech segments
+    get_speech_segments(vad, waveform_int16, sample_rate, output_dir, file_name)
+    return f"Processed: {file_path}"
+
+
+def process_and_segment_parallel():
+    """
+    CHANGED: This function now gathers all file paths and distributes
+    the work to a multiprocessing pool.
+    """
+    directory = r"F:\Datasets\VoxCeleb1\dev_wav"
+    output_base_dir = r"F:\Datasets\VoxCeleb1\dev_wav_split"
+
+    tasks = []  # List to hold all (file_path, output_dir, file_name) tuples
+
+    print("[INFO] Gathering all files to process...")
+    # Use os.walk for easier directory traversal
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            # Skip already processed files
+            if file.endswith("_processed.wav") or not file.endswith(".wav"):
+                continue
+
+            file_path = os.path.join(root, file)
+
+            # Create the corresponding output directory structure
+            relative_path = os.path.relpath(root, directory)
+            output_dir = os.path.join(output_base_dir, relative_path)
+
+            tasks.append((file_path, output_dir, file))
+
+    print(f"[INFO] Found {len(tasks)} files to process.")
+    if not tasks:
+        print("[INFO] No files to process.")
+        return
+
+    # Get CPU count, leave one free for the system
+    n_cores = multiprocessing.cpu_count() - 2
+    if n_cores < 1:
+        n_cores = 1
+
+    print(f"[INFO] Starting parallel processing with {n_cores} workers...")
+
+    # Create a processing pool and run the tasks
+    with multiprocessing.Pool(processes=n_cores) as pool:
+        results = list(tqdm(pool.imap_unordered(process_file_worker, tasks), total=len(tasks)))
+
+    print("[INFO] All processing complete.")
+
+if __name__ == "__main__":
+    multiprocessing.set_start_method('spawn', force=True)
+
+    process_and_segment_parallel()

@@ -1,7 +1,7 @@
 import random
 
-train_txt_path = "C:/Users/Akshay Gupta/PycharmProjects/speaker_recognition/params/train_list.txt"
-eval_list_path = "C:/Users/Akshay Gupta/PycharmProjects/speaker_recognition/params/eval_list.txt"
+train_txt_path = "C:/Users/Akshay Gupta/PycharmProjects/speaker_recognition/params/train_list(dev).txt"
+eval_list_path = "C:/Users/Akshay Gupta/PycharmProjects/speaker_recognition/params/eval_list(dev).txt"
 
 speaker_files = {}
 with open(train_txt_path, "r") as f:
